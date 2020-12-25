@@ -44,8 +44,8 @@ double height_val(uint32_t pixel) {
 
 uint32_t pxl_from_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     uint32_t val = (a << 24);
-    val = val | (g << 16);
-    val = val | (b << 8);
+    val = val | (b << 16);
+    val = val | (g << 8);
     val = val | r;
     return val;
 }
@@ -57,10 +57,11 @@ void process(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
         for (int col = 0; col < 512; col++) {
             double hgt = height_val(row[col+2]);
             double frac = hgt / 1000; // arbitrary number
+            if (frac < 0) frac = 0.0;
             if (frac > 1) frac = 1.0;
             frac = frac * 255;
             uint8_t v = frac;
-            buf[col] = pxl_from_rgba(v,v,v,255);
+            buf[col] = pxl_from_rgba(0,0,255,v);
         }
         output.set_row(row_idx, buf, 512);
     }
