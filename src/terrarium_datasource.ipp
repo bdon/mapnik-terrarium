@@ -83,15 +83,6 @@ layer_descriptor terrarium_datasource::get_descriptor() const
 
 featureset_ptr terrarium_datasource::features(query const& q) const
 {
-    mapnik::view_transform t(width_, height_, extent_, 0, 0);
-    mapnik::box2d<double> intersect = extent_.intersect(q.get_bbox());
-    mapnik::box2d<double> ext = t.forward(intersect);
-
-    const int width  = int(ext.maxx() + 0.5) - int(ext.minx() + 0.5);
-    const int height = int(ext.maxy() + 0.5) - int(ext.miny() + 0.5);
-
-    MAPNIK_LOG_DEBUG(raster) << "terrarium_datasource: Box size=" << width << "," << height;
-
     return std::make_shared<terrarium_featureset>(extent_, q, image_reader_);
 }
 
