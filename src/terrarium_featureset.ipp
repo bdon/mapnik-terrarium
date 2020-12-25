@@ -50,12 +50,16 @@ uint32_t pxl_from_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return val;
 }
 
-void process(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
-    for (int row_idx = 0; row_idx < 512; row_idx++) {
-        auto row = input.get_row(row_idx,2);
+// use signed integers, can be -1
+double get_height(mapnik::image_rgba8 const& input,int32_t row,int32_t col) {
+    return height_val(input.get_row(row+2)[col+2]);
+}
+
+void process_heightmap(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
+    for (int32_t row = 0; row < 512; row++) {
         uint32_t *buf = new uint32_t[512];
-        for (int col = 0; col < 512; col++) {
-            double hgt = height_val(row[col+2]);
+        for (int32_t col = 0; col < 512; col++) {
+            double hgt = get_height(input,row,col);
             double frac = hgt / 1000; // arbitrary number
             if (frac < 0) frac = 0.0;
             if (frac > 1) frac = 1.0;
@@ -63,7 +67,30 @@ void process(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
             uint8_t v = frac;
             buf[col] = pxl_from_rgba(0,0,255,v);
         }
-        output.set_row(row_idx, buf, 512);
+        output.set_row(row, buf, 512);
+    }
+}
+
+// see implementation from:
+// https://observablehq.com/@sahilchinoy/hillshader
+void process_hillshade(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
+    for (int32_t row = 0; row < 512; row++) {
+        uint32_t *buf = new uint32_t[512];
+        for (int32_t col = 0; col < 512; col++) {
+            double hgt = get_height(input,row,col);
+            double dzdx = get_height(input,row,col+1) - get_height(input,row,col-1);
+            double dzdy = get_height(input,row+1,col) - get_height(input,row-1,col);
+            double slope = atan(0.2 * sqrt(pow(dzdx,2) + pow(dzdy,2)));
+            double aspect = atan2(-dzdy, -dzdx);
+            double sunAzimuth = 315;
+            double sunElevation = 45;
+            double luminance = cos(M_PI * .5 - aspect - sunAzimuth) * sin(slope) * sin(M_PI * .5 - sunElevation) + cos(slope) * cos(M_PI * .5 - sunElevation);
+            if (luminance < 0) luminance = 0;
+            luminance = sqrt(luminance * 0.8 + 0.2);
+            luminance = luminance * 255;
+            buf[col] = pxl_from_rgba(luminance,luminance,luminance,255);
+        }
+        output.set_row(row, buf, 512);
     }
 }
 
@@ -77,7 +104,8 @@ feature_ptr terrarium_featureset::next()
         mapnik::image_any input = image_reader_->read(0, 0, 516, 516);
         mapnik::image_rgba8 output(512,512);
         auto const &input_img = input.get<mapnik::image_rgba8>();
-        process(input_img,output);
+        //process_heightmap(input_img,output);
+        process_hillshade(input_img,output);
         mapnik::raster_ptr raster = std::make_shared<mapnik::raster>(extent_, extent_, std::move(output), filter_factor_);
         feature->set_raster(raster);
     }
