@@ -34,6 +34,38 @@ terrarium_featureset::~terrarium_featureset()
 {
 }
 
+double height_val(uint32_t pixel) {
+    uint8_t red = pixel & 0xff;
+    uint8_t green = (pixel >> 8) & 0xff;
+    uint8_t blue = (pixel >> 16) & 0xff;
+    // https://github.com/tilezen/joerd/blob/master/docs/formats.md
+    return (red * 256 + green + blue / 256) - 32768;
+}
+
+uint32_t pxl_from_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    uint32_t val = (a << 24);
+    val = val | (g << 16);
+    val = val | (b << 8);
+    val = val | r;
+    return val;
+}
+
+void process(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
+    for (int row_idx = 0; row_idx < 512; row_idx++) {
+        auto row = input.get_row(row_idx,2);
+        uint32_t *buf = new uint32_t[512];
+        for (int col = 0; col < 512; col++) {
+            double hgt = height_val(row[col+2]);
+            double frac = hgt / 1000; // arbitrary number
+            if (frac > 1) frac = 1.0;
+            frac = frac * 255;
+            uint8_t v = frac;
+            buf[col] = pxl_from_rgba(v,v,v,255);
+        }
+        output.set_row(row_idx, buf, 512);
+    }
+}
+
 feature_ptr terrarium_featureset::next()
 {
     if (done) return feature_ptr();
@@ -44,33 +76,7 @@ feature_ptr terrarium_featureset::next()
         mapnik::image_any input = image_reader_->read(0, 0, 516, 516);
         mapnik::image_rgba8 output(512,512);
         auto const &input_img = input.get<mapnik::image_rgba8>();
-
-        // calculate result from input, put in output
-
-        for (int row_idx = 0; row_idx < 512; row_idx++) {
-            auto row = input_img.get_row(row_idx,2);
-
-            uint32_t *buf = new uint32_t[512];
-            for (int col = 0; col < 512; col++) {
-                uint32_t pixel = row[col+2];
-                uint8_t red = pixel & 0xff;
-                uint8_t green = (pixel >> 8) & 0xff;
-                uint8_t blue = (pixel >> 16) & 0xff;
-                // https://github.com/tilezen/joerd/blob/master/docs/formats.md
-                double hgt = (red * 256 + green + blue / 256) - 32768;
-                double frac = hgt / 1000; // arbitrary number
-                if (frac > 1) frac = 1.0;
-                frac = frac * 255;
-                uint8_t alpha = frac;
-                uint32_t val = 0xff000000;
-                val = val | (alpha << 16);
-                val = val | (alpha << 8);
-                val = val | (alpha);
-                buf[col] = val;
-            }
-            output.set_row(row_idx, buf, 512);
-        }
-
+        process(input_img,output);
         mapnik::raster_ptr raster = std::make_shared<mapnik::raster>(extent_, extent_, std::move(output), filter_factor_);
         feature->set_raster(raster);
     }
