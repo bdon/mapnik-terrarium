@@ -50,6 +50,15 @@ uint32_t pxl_from_rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     return val;
 }
 
+
+uint32_t bytes(mapnik::color c) {
+    uint32_t val = (c.alpha() << 24);
+    val = val | (c.blue() << 16);
+    val = val | (c.green() << 8);
+    val = val | c.red();
+    return val;
+}
+
 // use signed integers, can be -1
 double get_height(mapnik::image_rgba8 const& input,int32_t row,int32_t col) {
     return height_val(input.get_row(row+2)[col+2]);
@@ -71,6 +80,13 @@ void process_heightmap(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &ou
     }
 }
 
+mapnik::color blend(mapnik::color color1, mapnik::color color2) {
+    uint8_t red = color1.red() + color2.red();
+    uint8_t green = color1.green() + color2.green();
+    uint8_t blue = color1.blue() + color2.blue();
+    return mapnik::color{red,green,blue}; 
+}
+
 // see implementation from:
 // https://observablehq.com/@sahilchinoy/hillshader
 void process_hillshade(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &output) {
@@ -78,18 +94,36 @@ void process_hillshade(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &ou
         uint32_t *buf = new uint32_t[512];
         for (int32_t col = 0; col < 512; col++) {
             double hgt = get_height(input,row,col);
+
             double dzdx = get_height(input,row,col+1) - get_height(input,row,col-1);
             double dzdy = get_height(input,row+1,col) - get_height(input,row-1,col);
             double slope = atan(0.2 * sqrt(pow(dzdx,2) + pow(dzdy,2)));
             double aspect = atan2(-dzdy, -dzdx);
-            double azimuth = 315.0 - 90.0;
-            double azimuth_rad = azimuth * M_PI / 180.0;
-            double sunElevation = M_PI / 4.0;
-            double luminance = cos(M_PI * .5 - aspect - azimuth_rad) * sin(slope) * sin(M_PI * .5 - sunElevation) + cos(slope) * cos(M_PI * .5 - sunElevation);
-            if (luminance < 0) luminance = 0;
-            luminance = sqrt(luminance * 0.8 + 0.2);
-            luminance = luminance * 255;
-            buf[col] = pxl_from_rgba(luminance,luminance,luminance,255);
+
+            double azimuth1 = 315.0;
+            double elevation1 = 45.0;
+            double elev1 = elevation1 * M_PI / 180.0;
+            double luminance1 = cos(M_PI * .5 - aspect - (azimuth1 - 90.0) * M_PI / 180.0) * sin(slope) * sin(M_PI * .5 - elev1) + cos(slope) * cos(M_PI * .5 - elev1);
+            if (luminance1 < 0) luminance1 = 0;
+            luminance1 = sqrt(luminance1 * 0.8 + 0.2);
+            luminance1 = luminance1 * 255;
+            mapnik::color color1{(uint8_t)luminance1,(uint8_t)(luminance1/2),0};
+
+            double azimuth2 = 225.0;
+            double elevation2 = 45.0;
+            double elev2 = elevation2 * M_PI / 180.0;
+            double luminance2 = cos(M_PI * .5 - aspect - (azimuth2 - 90.0) * M_PI / 180.0) * sin(slope) * sin(M_PI * .5 - elev2) + cos(slope) * cos(M_PI * .5 - elev2);
+            if (luminance2 < 0) luminance2 = 0;
+            luminance2 = sqrt(luminance2 * 0.8 + 0.2);
+            luminance2 = luminance2 * 255;
+            mapnik::color color2{0,(uint8_t)(luminance2/2),(uint8_t)luminance2};
+            mapnik::color color3 = blend(color1,color2);
+
+            double alpha = (hgt - 20) / 100 * 255;
+            if (alpha > 255) alpha = 255;
+            if (alpha < 0) alpha = 0;
+            color3.set_alpha(alpha);
+            buf[col] = bytes(color3);
         }
         output.set_row(row, buf, 512);
     }
