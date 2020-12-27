@@ -82,9 +82,10 @@ void process_hillshade(mapnik::image_rgba8 const& input, mapnik::image_rgba8 &ou
             double dzdy = get_height(input,row+1,col) - get_height(input,row-1,col);
             double slope = atan(0.2 * sqrt(pow(dzdx,2) + pow(dzdy,2)));
             double aspect = atan2(-dzdy, -dzdx);
-            double sunAzimuth = 315;
-            double sunElevation = 45;
-            double luminance = cos(M_PI * .5 - aspect - sunAzimuth) * sin(slope) * sin(M_PI * .5 - sunElevation) + cos(slope) * cos(M_PI * .5 - sunElevation);
+            double azimuth = 315.0 - 90.0;
+            double azimuth_rad = azimuth * M_PI / 180.0;
+            double sunElevation = M_PI / 4.0;
+            double luminance = cos(M_PI * .5 - aspect - azimuth_rad) * sin(slope) * sin(M_PI * .5 - sunElevation) + cos(slope) * cos(M_PI * .5 - sunElevation);
             if (luminance < 0) luminance = 0;
             luminance = sqrt(luminance * 0.8 + 0.2);
             luminance = luminance * 255;
